@@ -16,6 +16,8 @@ fi
 
 echo ""
 echo "[1/7] Installing power management (TLP)..."
+# TLP conflicts with tuned, so remove it first
+dnf remove -y tuned tuned-ppd 2>/dev/null || true
 dnf install -y tlp tlp-rdw powertop
 systemctl enable --now tlp
 systemctl mask power-profiles-daemon 2>/dev/null || true
@@ -42,6 +44,14 @@ if git clone https://github.com/linux-on-mac/mbpfan.git; then
     make
     make install
 
+    # Tune fan curve: wider ramp zone so fans don't jump at ~66°C
+    sed -i \
+        -e 's/^low_temp = .*/low_temp = 63/' \
+        -e 's/^high_temp = .*/high_temp = 75/' \
+        -e 's/^max_temp = .*/max_temp = 90/' \
+        -e 's/^polling_interval = .*/polling_interval = 2/' \
+        /etc/mbpfan.conf
+
     # Create systemd service file
     cat > /etc/systemd/system/mbpfan.service << 'SERVICEEOF'
 [Unit]
@@ -58,7 +68,8 @@ WantedBy=multi-user.target
 SERVICEEOF
 
     systemctl daemon-reload
-    systemctl enable --now mbpfan
+    systemctl enable mbpfan
+    systemctl restart mbpfan
     echo "    ✓ mbpfan built and installed"
 else
     echo "    ⚠ Could not clone mbpfan repo"
